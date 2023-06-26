@@ -344,7 +344,7 @@ function displaySharedUsers(path) {
     users.forEach(function(user) {
 
       listName = document.createElement("li"),
-      spanAvatar = document.createElement("span"),
+      spanAvatar = undefined,
       spanName = document.createElement("span"),
       spanUid = document.createElement("span"),
       spanRemove = document.createElement("span"),
@@ -352,8 +352,16 @@ function displaySharedUsers(path) {
 
       listName.setAttribute('class', 'list-group-item text-left')
       listName.setAttribute('data-uid', user.uid)
-      spanAvatar.innerText = user.name.charAt(0)
-      spanAvatar.setAttribute('class', 'avatar float-left mr-2')
+      if (user.image) {
+        spanAvatar = document.createElement("img")
+        spanAvatar.setAttribute('id', 'user-image')
+        spanAvatar.setAttribute('class', 'avatar float-left mr-2')
+        spanAvatar.setAttribute('src', user.image)
+      } else {
+        spanAvatar = document.createElement("span")
+        spanAvatar.innerText = user.name.charAt(0)
+        spanAvatar.setAttribute('class', 'avatar float-left mr-2')
+      }
       spanName.setAttribute('class', 'shared-user')
       spanName.innerText = user.name
       spanUid.setAttribute('class', 'text-muted ml-1')
