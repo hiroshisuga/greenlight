@@ -24,9 +24,12 @@ class RecordingsController < ApplicationController
 
   # POST /:meetingID/:record_id
   def update
-    meta = {
-      "meta_#{META_LISTED}" => (params[:state] == "public"),
-    }
+    meta = {}
+    if params[:state]
+      meta["meta_#{META_LISTED}"] = (params[:state] == "public")
+    elsif params[:thumbnails]
+      meta["meta_imagesel"] = params[:thumbnails]
+    end
 
     if params[:state] == "protected"
       protect_recording(params[:record_id])
