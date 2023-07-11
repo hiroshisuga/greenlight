@@ -28,14 +28,16 @@ import PublicRecordingRow from './PublicRecordingRow';
 import PublicRecordingsRowPlaceHolder from './PublicRecordingsRowPlaceHolder';
 import ButtonLink from '../../../shared_components/utilities/ButtonLink';
 import UserBoardIcon from '../../UserBoardIcon';
+import { useAuth } from '../../../../contexts/auth/AuthProvider';
 
 export default function PublicRecordingsList({ friendlyId }) {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const { data: recordings, ...publicRecordingsAPI } = usePublicRecordings({ friendlyId, page, search: searchInput });
+  const currentUser = useAuth();
 
-  if (!publicRecordingsAPI.isLoading && recordings?.data?.length === 0 && !searchInput) {
+  if (!currentUser?.signed_in || (!publicRecordingsAPI.isLoading && recordings?.data?.length === 0 && !searchInput)) {
     return (
       <div className="text-center my-4">
         <div className="icon-circle rounded-circle d-block mx-auto mb-3">
