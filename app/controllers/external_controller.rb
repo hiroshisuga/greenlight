@@ -166,9 +166,14 @@ class ExternalController < ApplicationController
     #Rails.logger.info("Credentials: #{credentials}")
     #Rails.logger.info("Credentials.info: #{credentials['info']}")
     #name = if credentials['info']['last_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|[一-龠々])/ || credentials['info']['first_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|[一-龠々])/
-    name = if credentials['info']['last_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|\p{Han})/ || credentials['info']['first_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|\p{Han})/
+    #name = if credentials['info']['last_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|\p{Han})/ || credentials['info']['first_name'] =~ /(?:\p{Hiragana}|\p{Katakana}|\p{Han})/
+    # For below you need to configure Keycloak properly because it does not receive displayName property from Microsoft EntraID by default.
+    #name = if credentials['extra']['raw_info']['displayName']
+    name = if credentials.dig('extra', 'raw_info', 'displayName')
              #credentials['family_name'] + "　" + credentials['given_name']
-             credentials['info']['last_name'] + "　" + credentials['info']['first_name']
+             #credentials['info']['last_name'] + "　" + credentials['info']['first_name']
+             #credentials['extra']['raw_info']['displayName']
+             credentials.dig('extra', 'raw_info', 'displayName')
            else
              credentials['info']['name']
            end
