@@ -180,7 +180,7 @@ class ExternalController < ApplicationController
     #Rails.logger.info("User's name: #{name}")
     {
       #name: credentials['info']['name'],
-      name: name
+      name: name,
       email: credentials['info']['email'],
       language: extract_language_code(credentials['info']['locale']),
       external_id: credentials['uid'],
