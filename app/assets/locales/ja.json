@@ -15,6 +15,7 @@
   "share": "共有",
   "cancel": "キャンセル",
   "reset":   "リセット",
+  "reset_password": "パスワードをリセット",
   "close": "閉じる",
   "delete": "削除",
   "copy": "参加リンクをコピー",
@@ -164,6 +165,10 @@
       "wrong_access_code": "誤った接続コード",
       "generate_viewers_access_code": "視聴者用接続コードを作成する",
       "generate_mods_access_code": "司会者用接続コードを作成する",
+      "server_tag": "この会議室のサーバタイプを選択",
+      "default_tag_name": "通常",
+      "server_tag_desired": "最適",
+      "server_tag_required": "最小",
       "are_you_sure_delete_room": "本当にこの会議室を削除しますか？"
     }
   },
@@ -181,6 +186,14 @@
     "protected": "保護",
     "public": "公開",
     "public_protected": "公開 / 保護",
+    "formats_help": "可能な再生方式が表示されます。選択すると、BigBlueButtonの録画が新しいタブで再生されます",
+    "visibility_help": {
+      "public_protected": "録画が、公開録画のページから再生可能です。公開録画のページには、会議参加のページから誰でもアクセスできます。一回限りの接続リンクを使って他人と共有することも可能です",
+      "public": "録画が、公開録画のページから再生可能です。公開録画のページには、会議参加のページから誰でもアクセスできます。録画へのリンクは誰とでも共有可能です",
+      "protected": "録画は、会議室の所有者だけが再生可能です。一回限りの接続リンクを使って他人と共有することも可能です",
+      "published": "録画は、接続リンクを知っている人だけが再生可能です",
+      "unpublished": "録画は誰も再生できません"
+    },
     "length_in_minutes": "{{recording.length}}分",
     "processing_recording": "録画を処理中。数分かかることがあります...",
     "copy_recording_urls": "録画のURLをコピー",
@@ -203,6 +216,8 @@
       "banned": "ロック",
       "ban": "ロックする",
       "unban": "ロックを解除する",
+      "unverified": "未承認",
+      "verify": "承認",
       "deleted": "削除",
       "invited_tab": "招待",
       "invite_user": "ユーザーを招待",
@@ -226,6 +241,8 @@
       "empty_pending_users_subtext": "ユーザーの状態が「保留」に変わると、こちらに表示されます。",
       "empty_banned_users": "このサーバーには、ロックされているユーザーはまだいません！",
       "empty_banned_users_subtext": "ユーザーの状態がロックに変わると、こちらに表示されます。",
+      "empty_unverified_users": "このサーバーには、未承認のユーザーはまだ一人もいません！",
+      "empty_unverified_users_subtext": "未承認のユーザーがいる場合はここに表示されます。",
       "empty_invited_users": "このサーバーには、招待されているユーザーはまだいません！",
       "empty_invited_users_subtext": "ユーザーの状態が招待中に変わると、こちらに表示されます。",
       "invited": {
@@ -274,10 +291,12 @@
       "administration": {
         "administration": "法的根拠",
         "terms": "利用規約",
-        "privacy": "プライバシーポリシー",
-        "privacy_policy": "プライバシーポリシー",
+        "privacy": "プライバシーに関する告知",
+        "privacy_policy": "プライバシーに関する告知",
+        "accessibility_statement": "アクセシビリティの方針",
         "change_term_links": "ページ下方の利用規約へのリンクを変更する",
         "change_privacy_link": "ページ下方のプライバシーポリシーへのリンクを変更する",
+        "change_accessibility_statement_link": "ページ下方にある、アクセシビリティの方針へのリンクを変更する",
         "helpcenter": "ヘルプセンター",
         "change_helpcenter_link": "プロフィールのドロップダウンメニュー内に表示されるヘルプセンターのリンクを変更",
         "maintenance": "メンテナンスバナー",
@@ -293,6 +312,8 @@
         "allow_users_to_share_rooms_description": "無効に設定した場合、各会議室のドロップダウンからボタンが削除され、ユーザーが会議室を共有できなくなります",
         "allow_users_to_preupload_presentation": "ユーザーにプレゼンファイルの事前アップロードを許可",
         "allow_users_to_preupload_presentation_description": "ユーザーがプレゼンファイルを事前にアップロードし、この会議室専用の標準プレゼンとして使用できるようになります",
+        "show_sign_in_on_room_join": "入室時にサインインリンクを表示する",
+        "show_sign_in_on_room_join_description": "もしユーザーがサインインしていない場合、入室時にウィンドウ下部にサインインのためのリンクが現れます",
         "default_visibility": "デフォルトの録画公開度",
         "default_visibility_description": "新しい録画は、まずは全てこの公開度となります。",
         "session_timeout": "セッションの継続時間",
@@ -308,14 +329,19 @@
         "resync_on_login": "サインインごとにユーザーのデーターを再同期",
         "resync_on_login_description": "サインインのたびにユーザーの情報を再同期し、外部の承認提供者の情報とGreenlightの情報とを常に一致させます",
         "default_role": "標準の役割",
-        "default_role_description": "新しく作成されたユーザーに自動的に割り当てられる役割です",
+        "default_role_description": "新しく作成されたユーザーにはこの役割が自動的に割り当てられます",
         "registration_method": "登録方法",
         "registration_method_description": "ユーザーがこのサイトに登録する方法を変更します",
         "registration_methods" : {
           "open": "誰でも自由に登録",
           "invite": "招待制",
           "approval": "承認制"
-        }
+        },
+        "allowed_domains": "許可するEmailのドメイン",
+        "allowed_domains_signup_description": "特定のEmailドメインのみからのサインアップを許可します。@test.com や domain.com のような形式で記入してください。",
+        "enter_allowed_domains_rule" : "許可するドメインを入力",
+        "allow_name_update": "ユーザーに名前の変更を許可",
+        "allow_name_update_description": "アカウント作成後に、ユーザーが名前を変更することを許可します。許可しない場合、名前を変更できるのは管理者だけとなります。"
       }
     },
     "room_configuration": {
@@ -413,10 +439,11 @@
         "brand_color_updated": "サイトの基調色がアップデートされました。",
         "brand_image_updated": "ブランド画像がアップデートされました。",
         "brand_image_deleted": "ブランド画像が消去されました。",
-        "privacy_policy_updated": "プライバシーポリシーがアップデートされました。",
+        "privacy_policy_updated": "プライバシーに関する告知がアップデートされました。",
         "helpcenter_updated": "ヘルプセンターのリンクが更新されました。",
         "terms_of_service_updated": "利用規約が更新されました。",
-        "maintenance_updated": "メンテナンスバナーが更新されました。"
+        "maintenance_updated": "メンテナンスバナーが更新されました。",
+        "allowed_domains_signup_updated": "許可するEmailのドメインが更新されました。"
       },
       "recording": {
         "recording_visibility_updated": "録画の公開度が更新されました。",
@@ -437,6 +464,7 @@
     },
     "error": {
       "problem_completing_action": "操作をうまく完了できませんでした。\nもう一度やってみてください。",
+      "server_type_unavailable": "希望されたサーバタイプは利用できません。別のタイプを部屋の設定から選んでください。",
       "file_type_not_supported": "ファイルの形式がサポートされていません。",
       "file_size_too_large": "ファイルが大きすぎます。",
       "file_upload_error": "ファイルがアップロードできません。",
@@ -451,7 +479,8 @@
         "email_exists": "このメールアドレスで作成されたアカウントが既に存在します。他のメールアドレスでもう一度試してみてください。",
         "old_password": "入力された現パスワードは正しくありません",
         "pending": "あなたの登録申請は、管理者の許可待ちです",
-        "banned": "このアプリケーションに接続できません。もし何かの間違いであると思われたら、管理者に直接連絡してみてください"
+        "banned": "このアプリケーションに接続できません。もし何かの間違いであると思われたら、管理者に直接連絡してみてください",
+        "hcaptcha_invalid": "CAPTCHA認証に失敗しました。もう一度やってみてください。"
       },
       "rooms": {
         "room_limit": "会議室の数が上限に達したため、新たに作成することができません"
@@ -533,6 +562,11 @@
       },
       "url": {
         "invalid": "無効なURL"
+      },
+      "text_form": {
+        "value": {
+          "required": "何かメッセージを入力してください"
+        }
       }
     },
     "room": {
@@ -682,6 +716,9 @@
         "fields": {
           "emails": {
             "label": "メールアドレス"
+          },
+          "names": {
+            "label": "名前（任意）"
           }
         }
       },

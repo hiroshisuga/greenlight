@@ -18,7 +18,7 @@
 
 require 'rails_helper'
 
-RSpec.describe ExternalController, type: :controller do
+RSpec.describe ExternalController do
   let(:fake_setting_getter) { instance_double(SettingGetter) }
 
   describe '#create_user' do
@@ -30,6 +30,9 @@ RSpec.describe ExternalController, type: :controller do
         info: {
           email: Faker::Internet.email,
           name: Faker::Name.name
+        },
+        credentials: {
+          id_token: 'sample_id_token'
         }
       )
 
@@ -53,7 +56,6 @@ RSpec.describe ExternalController, type: :controller do
 
       get :create_user, params: { provider: 'openid_connect' }
 
-      expect(session[:session_token]).to eq(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).session_token)
       expect(response).to redirect_to(root_path)
     end
 
@@ -80,7 +82,7 @@ RSpec.describe ExternalController, type: :controller do
 
       expect do
         get :create_user, params: { provider: 'openid_connect' }
-      end.to change(User, :count).by(0)
+      end.not_to change(User, :count)
     end
 
     it 'looks the user up based on email' do
@@ -90,7 +92,24 @@ RSpec.describe ExternalController, type: :controller do
 
       expect do
         get :create_user, params: { provider: 'openid_connect' }
-      end.to change(User, :count).by(0)
+      end.not_to change(User, :count)
+    end
+
+    it 'sets the correct session variables' do
+      request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+
+      get :create_user, params: { provider: 'openid_connect' }
+
+      expect(session[:session_token]).to eq(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).session_token)
+    end
+
+    it 'sets oidc id token if OPENID_CONNECT_LOGOUT_PATH is set' do
+      request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+      ENV['OPENID_CONNECT_LOGOUT_PATH'] = '/logout'
+
+      get :create_user, params: { provider: 'openid_connect' }
+
+      expect(session[:oidc_id_token]).to eq(OmniAuth.config.mock_auth[:openid_connect][:credentials][:id_token])
     end
 
     context 'redirect' do
@@ -212,40 +231,52 @@ RSpec.describe ExternalController, type: :controller do
                email: 'email@example.com')
       end
 
-      it 'overwrites the saved values with the values from the authentication provider if true' do
-        allow_any_instance_of(SettingGetter).to receive(:call).and_return(true)
+      context 'value is true' do
+        before do
+          reg_method = instance_double(SettingGetter)
+          allow(SettingGetter).to receive(:new).with(setting_name: 'ResyncOnLogin', provider: 'greenlight').and_return(reg_method)
+          allow(reg_method).to receive(:call).and_return(true)
+        end
 
-        request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+        it 'overwrites the saved values with the values from the authentication provider if true' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
 
-        get :create_user, params: { provider: 'openid_connect' }
+          get :create_user, params: { provider: 'openid_connect' }
 
-        user.reload
-        expect(user.name).to eq(OmniAuth.config.mock_auth[:openid_connect]['info']['name'])
-        expect(user.email).to eq(OmniAuth.config.mock_auth[:openid_connect]['info']['email'])
+          user.reload
+          expect(user.name).to eq(OmniAuth.config.mock_auth[:openid_connect]['info']['name'])
+          expect(user.email).to eq(OmniAuth.config.mock_auth[:openid_connect]['info']['email'])
+        end
+
+        it 'does not overwrite the role even if true' do
+          allow_any_instance_of(SettingGetter).to receive(:call).and_return(true)
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+
+          new_role = create(:role)
+          user.update(role: new_role)
+
+          get :create_user, params: { provider: 'openid_connect' }
+
+          expect(user.reload.role).to eq(new_role)
+        end
       end
 
-      it 'does not overwrite the saved values with the values from the authentication provider if false' do
-        allow_any_instance_of(SettingGetter).to receive(:call).and_return(false)
+      context 'value is false' do
+        before do
+          reg_method = instance_double(SettingGetter)
+          allow(SettingGetter).to receive(:new).with(setting_name: 'ResyncOnLogin', provider: 'greenlight').and_return(reg_method)
+          allow(reg_method).to receive(:call).and_return(false)
+        end
 
-        request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+        it 'does not overwrite the saved values with the values from the authentication provider if false' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
 
-        get :create_user, params: { provider: 'openid_connect' }
+          get :create_user, params: { provider: 'openid_connect' }
 
-        user.reload
-        expect(user.name).to eq('Example Name')
-        expect(user.email).to eq('email@example.com')
-      end
-
-      it 'does not overwrite the role even if true' do
-        allow_any_instance_of(SettingGetter).to receive(:call).and_return(true)
-        request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
-
-        new_role = create(:role)
-        user.update(role: new_role)
-
-        get :create_user, params: { provider: 'openid_connect' }
-
-        expect(user.reload.role).to eq(new_role)
+          user.reload
+          expect(user.name).to eq('Example Name')
+          expect(user.email).to eq('email@example.com')
+        end
       end
     end
 
@@ -305,6 +336,23 @@ RSpec.describe ExternalController, type: :controller do
 
           expect(response).to redirect_to(root_path(error: Rails.configuration.custom_error_msgs[:invite_token_invalid]))
         end
+
+        it 'returns an InviteInvalid error if the invitation has expired' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          invite = create(
+            :invitation,
+            email: OmniAuth.config.mock_auth[:openid_connect][:info][:email],
+            updated_at: Invitation::INVITATION_VALIDITY_PERIOD.ago - 1.day
+          )
+          cookies[:inviteToken] = {
+            value: invite.token
+          }
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.not_to change(User, :count)
+
+          expect(Invitation.exists?(id: invite.id)).to be(true)
+          expect(response).to redirect_to(root_path(error: Rails.configuration.custom_error_msgs[:invite_token_invalid]))
+        end
       end
 
       context 'approval' do
@@ -325,6 +373,88 @@ RSpec.describe ExternalController, type: :controller do
       end
     end
 
+    context 'Allowed Domains' do
+      context 'restricted domain not set' do
+        before do
+          site_settings = instance_double(SettingGetter)
+          allow(SettingGetter).to receive(:new).with(setting_name: 'AllowedDomains', provider: 'greenlight').and_return(site_settings)
+          allow(site_settings).to receive(:call).and_return('')
+        end
+
+        it 'creates the user' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).from(0).to(1)
+        end
+      end
+
+      context 'restricted domain set to 1 domain' do
+        before do
+          site_settings = instance_double(SettingGetter)
+          allow(SettingGetter).to receive(:new).with(setting_name: 'AllowedDomains', provider: 'greenlight').and_return(site_settings)
+          allow(site_settings).to receive(:call).and_return('@domain.com')
+        end
+
+        it 'creates the user if the domain is allowed' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          request.env['omniauth.auth'][:info][:email] = 'email@domain.com'
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).from(0).to(1)
+        end
+
+        it 'does not create if the domain is not allowed' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.not_to change(User, :count)
+        end
+
+        it 'does not affect existing users with different domains' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+
+          create(:user, external_id: OmniAuth.config.mock_auth[:openid_connect][:uid])
+
+          get :create_user, params: { provider: 'openid_connect' }
+          expect(response).not_to redirect_to(root_path(error: Rails.configuration.custom_error_msgs[:banned_user]))
+        end
+      end
+
+      context 'restricted domain set to multiple domain' do
+        before do
+          site_settings = instance_double(SettingGetter)
+          allow(SettingGetter).to receive(:new).with(setting_name: 'AllowedDomains', provider: 'greenlight').and_return(site_settings)
+          allow(site_settings).to receive(:call).and_return('@example.com,@test.com,@domain.com')
+        end
+
+        it 'creates the user if the domain is allowed 1' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          request.env['omniauth.auth'][:info][:email] = 'email@example.com'
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).from(0).to(1)
+        end
+
+        it 'creates the user if the domain is allowed 2' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          request.env['omniauth.auth'][:info][:email] = 'email@test.com'
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).from(0).to(1)
+        end
+
+        it 'creates the user if the domain is allowed 3' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          request.env['omniauth.auth'][:info][:email] = 'email@domain.com'
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).from(0).to(1)
+        end
+
+        it 'does not create if the domain is not allowed' do
+          request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+          request.env['omniauth.auth'][:info][:email] = 'test@invaliddomain.com'
+
+          expect { get :create_user, params: { provider: 'openid_connect' } }.not_to change(User, :count)
+        end
+      end
+    end
+
     context 'Role mapping' do
       let!(:role1) { create(:role, name: 'role1') }
 
@@ -341,6 +471,93 @@ RSpec.describe ExternalController, type: :controller do
 
         expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).by(1)
         expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).role).to eq(role1)
+      end
+    end
+
+    context 'avatar' do
+      before do
+        OmniAuth.config.mock_auth[:openid_connect] = OmniAuth::AuthHash.new(
+          uid: Faker::Internet.uuid,
+          info: {
+            email: Faker::Internet.email,
+            name: Faker::Name.name,
+            image: Faker::Avatar.image
+          }
+        )
+
+        request.env['omniauth.auth'] = OmniAuth.config.mock_auth[:openid_connect]
+        stub_request(:get, OmniAuth.config.mock_auth[:openid_connect][:info][:image])
+          .to_return(body: file_fixture('default-avatar.png'), headers: { 'Content-Type' => 'image/jpeg' }, status: 200)
+      end
+
+      it 'attaches the avatar to the user' do
+        get :create_user, params: { provider: 'openid_connect' }
+
+        expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).avatar).to be_attached
+      end
+
+      it 'does not re-attach the avatar if it hasnt changed' do
+        reg_method = instance_double(SettingGetter)
+        allow(SettingGetter).to receive(:new).with(setting_name: 'ResyncOnLogin', provider: 'greenlight').and_return(reg_method)
+        allow(reg_method).to receive(:call).and_return(true)
+
+        profile_file = URI.parse(OmniAuth.config.mock_auth[:openid_connect][:info][:image])
+        filename = File.basename(profile_file.path)
+
+        user = create(:user, email: OmniAuth.config.mock_auth[:openid_connect][:info][:email])
+        user.avatar.attach(io: fixture_file_upload('default-avatar.png'), filename:, content_type: 'image/png')
+
+        expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).avatar).not_to receive(:attach)
+        get :create_user, params: { provider: 'openid_connect' }
+      end
+
+      it 'creates the user without an avatar if the avatar is rejected' do
+        stub_request(:get, OmniAuth.config.mock_auth[:openid_connect][:info][:image])
+          .to_return(body: file_fixture('large-avatar.jpg'), headers: { 'Content-Type' => 'image/jpeg' }, status: 200)
+
+        expect { get :create_user, params: { provider: 'openid_connect' } }.to change(User, :count).by(1)
+
+        expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).avatar).not_to be_attached
+        expect(response).to redirect_to(root_path)
+      end
+
+      it 'keeps an existing user signing in when their avatar is rejected on resync' do
+        reg_method = instance_double(SettingGetter)
+        allow(SettingGetter).to receive(:new).with(setting_name: 'ResyncOnLogin', provider: 'greenlight').and_return(reg_method)
+        allow(reg_method).to receive(:call).and_return(true)
+
+        user = create(:user, external_id: OmniAuth.config.mock_auth[:openid_connect][:uid],
+                             email: OmniAuth.config.mock_auth[:openid_connect][:info][:email])
+        user.avatar.attach(io: fixture_file_upload('default-avatar.png'), filename: 'kept-avatar.png', content_type: 'image/png')
+
+        stub_request(:get, OmniAuth.config.mock_auth[:openid_connect][:info][:image])
+          .to_return(body: file_fixture('large-avatar.jpg'), headers: { 'Content-Type' => 'image/jpeg' }, status: 200)
+
+        get :create_user, params: { provider: 'openid_connect' }
+
+        expect(response).to redirect_to(root_path)
+        expect(user.reload.avatar.filename.to_s).to eq('kept-avatar.png')
+      end
+
+      it 'does not prevent the user from being created if the avatar attaching fails' do
+        allow(OmniAuth.config.mock_auth[:openid_connect][:info][:image]).to receive(:blank?).and_raise(StandardError, 'Some error')
+
+        expect { get :create_user, params: { provider: 'openid_connect' } }.not_to raise_error
+        expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email])).to be_present
+      end
+
+      it 'does not try to attach the avatar if no image is passed' do
+        OmniAuth.config.mock_auth[:openid_connect][:info][:image] = nil
+
+        get :create_user, params: { provider: 'openid_connect' }
+
+        expect(User.find_by(email: OmniAuth.config.mock_auth[:openid_connect][:info][:email]).avatar).not_to be_attached
+      end
+
+      it 'does not try to attach the avatar if the user is invalid' do
+        allow_any_instance_of(User).to receive(:valid?).and_return(false)
+        expect_any_instance_of(User).not_to receive(:avatar)
+        get :create_user, params: { provider: 'openid_connect' }
       end
     end
   end
@@ -382,10 +599,11 @@ RSpec.describe ExternalController, type: :controller do
 
   describe '#meeting_ended' do
     let(:room) { create(:room, online: true) }
+    let(:token) { BigBlueButtonApi.new(provider: 'greenlight').encode_jwt({ meeting_id: room.meeting_id }) }
 
     context 'Recorded session' do
       it 'sets online to false' do
-        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true' }
+        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true', token: }
 
         expect(room.reload.online).to be(false)
         expect(response).to have_http_status(:ok)
@@ -393,10 +611,10 @@ RSpec.describe ExternalController, type: :controller do
       end
 
       it 'increments a rooms recordings processing value if the meeting was recorded' do
-        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true' }
+        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true', token: }
         expect(room.reload.recordings_processing).to eq(1)
 
-        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true' }
+        get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true', token: }
         expect(room.reload.recordings_processing).to eq(2)
       end
     end
@@ -404,7 +622,7 @@ RSpec.describe ExternalController, type: :controller do
     context 'Unrecorded session' do
       it 'sets online to false without incrementing a rooms recordings processing' do
         expect do
-          get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'false' }
+          get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'false', token: }
         end.not_to(change { room.reload.recordings_processing })
 
         expect(room.online).to be(false)
@@ -415,10 +633,41 @@ RSpec.describe ExternalController, type: :controller do
 
     context 'Inexistent room' do
       it 'silently fail' do
-        get :meeting_ended, params: { meetingID: '404', recordingmarks: 'false' }
+        get :meeting_ended, params: {
+          meetingID: '404', recordingmarks: 'false',
+          token: BigBlueButtonApi.new(provider: 'greenlight').encode_jwt({ meeting_id: '404' })
+        }
 
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body).to eq({})
+      end
+    end
+
+    context 'Invalid token' do
+      it 'does not update the room without a token' do
+        expect do
+          get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true' }
+        end.not_to(change { room.reload.attributes })
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'does not update the room for a token that is not signed with the BBB secret' do
+        expect do
+          get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true', token: 'not-a-jwt' }
+        end.not_to(change { room.reload.attributes })
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'does not update the room for a token signed for a different meeting' do
+        other_token = BigBlueButtonApi.new(provider: 'greenlight').encode_jwt({ meeting_id: create(:room).meeting_id })
+
+        expect do
+          get :meeting_ended, params: { meetingID: room.meeting_id, recordingmarks: 'true', token: other_token }
+        end.not_to(change { room.reload.attributes })
+
+        expect(response).to have_http_status(:unauthorized)
       end
     end
   end

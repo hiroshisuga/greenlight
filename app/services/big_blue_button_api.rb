@@ -44,12 +44,13 @@ class BigBlueButtonApi
     end
   end
 
-  def join_meeting(room:, role:, name: nil, avatar_url: nil)
+  def join_meeting(room:, role:, user_id:, name: nil, avatar_url: nil)
     bbb_server.join_meeting_url(
       room.meeting_id,
       name,
       '', # empty password -> use the role passed ing
       {
+        userID: user_id,
         role:,
         avatarURL: avatar_url,
         createTime: room.last_session&.to_datetime&.strftime('%Q')
@@ -96,12 +97,17 @@ class BigBlueButtonApi
   end
 
   def update_recordings(record_id:, meta_hash:)
-    bbb_server.update_recordings(record_id, {}, meta_hash)
+    bbb_server.update_recordings(record_id, nil, meta_hash)
   end
 
   # Decodes the JWT using the BBB secret as key (Used in Recording Ready Callback)
   def decode_jwt(token)
     JWT.decode token, @secret, true, { algorithm: 'HS256' }
+  end
+
+  # Encodes a JWT using the BBB secret as key (Used to sign the Meeting Ended Callback url)
+  def encode_jwt(payload)
+    JWT.encode payload, @secret, 'HS256'
   end
 
   private

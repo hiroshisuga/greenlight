@@ -54,6 +54,9 @@ export default function useUpdateSiteSetting(name) {
       case 'PrivacyPolicy':
         toast.success(t('toast.success.site_settings.privacy_policy_updated'));
         break;
+      case 'AccessibilityStatement':
+        toast.success(t('toast.success.site_settings.accessibility_updated'));
+        break;
       case 'HelpCenter':
         toast.success(t('toast.success.site_settings.helpcenter_updated'));
         break;
@@ -62,6 +65,9 @@ export default function useUpdateSiteSetting(name) {
         break;
       case 'Maintenance':
         toast.success(t('toast.success.site_settings.maintenance_updated'));
+        break;
+      case 'AllowedDomains':
+        toast.success(t('toast.success.site_settings.allowed_domains_signup_updated'));
         break;
       default:
         toast.success(t('toast.success.site_settings.site_setting_updated'));

@@ -39,10 +39,14 @@ class MeetingStarter
       settings: 'glViewerAccessCode'
     ).call
 
-    options.merge!(computed_options(access_code: viewer_code['glViewerAccessCode']))
+    handle_server_tag(meeting_options: options)
+
+    options.delete('muteOnStart') unless options['muteOnStart'] == 'true'
 
     retries = 0
     begin
+      options.merge!(computed_options(access_code: viewer_code['glViewerAccessCode']))
+
       meeting = BigBlueButtonApi.new(provider: @provider).start_meeting(room: @room, options:, presentation_url:)
 
       @room.update!(online: true, last_session: DateTime.strptime(meeting[:createTime].to_s, '%Q'))
@@ -65,12 +69,41 @@ class MeetingStarter
       moderatorOnlyMessage: moderator_message,
       loginURL: room_url,
       logoutURL: room_url,
-      meta_endCallbackUrl: meeting_ended_url(host: @base_url),
+      meetingEndedURL: meeting_ended_url(host: @base_url, token: meeting_ended_token),
       'meta_bbb-recording-ready-url': recording_ready_url(host: @base_url),
-      'meta_bbb-origin-version': ENV.fetch('VERSION_TAG', 'v3'),
       'meta_bbb-origin': 'greenlight',
-      'meta_bbb-origin-server-name': URI(@base_url).host
+      'meta_bbb-origin-server-name': URI(@base_url).host,
+      'meta_bbb-origin-version': ENV.fetch('VERSION_TAG', 'v3'),
+      'meta_bbb-context-name': @room.name,
+      'meta_bbb-context-id': @room.friendly_id
     }
+  end
+
+  def meeting_ended_token
+    BigBlueButtonApi.new(provider: @provider).encode_jwt({ meeting_id: @room.meeting_id })
+  end
+
+  def handle_server_tag(meeting_options:)
+    if meeting_options['serverTag'].present?
+      tag_names = Rails.configuration.server_tag_names
+      tag_roles = Rails.configuration.server_tag_roles
+      tag = meeting_options.delete('serverTag')
+      tag_required = meeting_options.delete('serverTagRequired')
+      # handle override modes
+      if Rails.configuration.server_tag_fallback_mode == 'required'
+        tag_required = 'true'
+      elsif Rails.configuration.server_tag_fallback_mode == 'desired'
+        tag_required = 'false'
+      end
+
+      if tag_names.key?(tag) && !(tag_roles.key?(tag) && tag_roles[tag].exclude?(@room.user.role_id))
+        tag_param = tag_required == 'true' ? "#{tag}!" : tag
+        meeting_options.store('meta_server-tag', tag_param)
+      end
+    else
+      meeting_options.delete('serverTag')
+      meeting_options.delete('serverTagRequired')
+    end
   end
 
   def presentation_url

@@ -26,6 +26,8 @@ class ApplicationController < ActionController::Base
     # Overwrites the session cookie if an extended_session cookie exists
     session[:session_token] ||= cookies.encrypted[:_extended_session]['session_token'] if cookies.encrypted[:_extended_session].present?
 
+    return nil if session[:session_token].blank?
+
     user = User.find_by(session_token: session[:session_token])
 
     if user && invalid_session?(user)
@@ -39,7 +41,7 @@ class ApplicationController < ActionController::Base
 
   # Returns whether hcaptcha is enabled by checking if ENV variables are set
   def hcaptcha_enabled?
-    (ENV['HCAPTCHA_SITE_KEY'].present? && ENV['HCAPTCHA_SECRET_KEY'].present?)
+    ENV['HCAPTCHA_SITE_KEY'].present? && ENV['HCAPTCHA_SECRET_KEY'].present?
   end
 
   # Returns the current provider value

@@ -33,7 +33,7 @@ class ExternalController < ApplicationController
     user = User.find_by(external_id: credentials['uid'], provider:)
 
     # Fallback mechanism to search by email
-    if user.blank?
+    if user.blank? && ENV.fetch('USE_EMAIL_AS_EXTERNAL_ID_FALLBACK', 'false') == 'true'
       user = User.find_by(email: credentials['info']['email'], provider:)
       # Update the user's external id to the latest value to avoid using the fallback
       user.update(external_id: credentials['uid']) if user.present? && credentials['uid'].present?
@@ -48,9 +48,13 @@ class ExternalController < ApplicationController
       return redirect_to root_path(error: Rails.configuration.custom_error_msgs[:invite_token_invalid])
     end
 
-    # Create the user if they dont exist
+    # Redirect to root if the user doesn't exist and has an invalid domain
+    return redirect_to root_path(error: Rails.configuration.custom_error_msgs[:banned_user]) if new_user && !valid_domain?(user_info[:email])
+
+    # Create the user if they don't exist
     if new_user
       user = UserCreator.new(user_params: user_info, provider: current_provider, role: default_role).call
+      handle_avatar(user, credentials['info']['image'])
       user.save!
       create_default_room(user)
 
@@ -61,8 +65,9 @@ class ExternalController < ApplicationController
       end
     end
 
-    if SettingGetter.new(setting_name: 'ResyncOnLogin', provider:).call
+    if !new_user && SettingGetter.new(setting_name: 'ResyncOnLogin', provider:).call
       user.assign_attributes(user_info.except(:language)) # Don't reset the user's language
+      handle_avatar(user, credentials['info']['image'])
       user.save! if user.changed?
     end
 
@@ -75,9 +80,11 @@ class ExternalController < ApplicationController
     # set the cookie based on session timeout setting
     session_timeout = SettingGetter.new(setting_name: 'SessionTimeout', provider: current_provider).call
     user.generate_session_token!(extended_session: session_timeout)
+    user.update(last_login: DateTime.now)
     handle_session_timeout(session_timeout.to_i, user) if session_timeout
 
     session[:session_token] = user.session_token
+    session[:oidc_id_token] = credentials.dig('credentials', 'id_token') if ENV['OPENID_CONNECT_LOGOUT_PATH'].present?
 
     # TODO: - Ahmad: deal with errors
 
@@ -111,12 +118,15 @@ class ExternalController < ApplicationController
     RecordingCreator.new(recording:, first_creation: true).call
 
     render json: {}, status: :ok
+  rescue JWT::DecodeError
+    render json: {}, status: :unauthorized
   end
 
   # GET /meeting_ended
   # Increments a rooms recordings_processing if the meeting was recorded
   def meeting_ended
-    # TODO: - ahmad: Add some sort of validation
+    return render json: {}, status: :unauthorized unless valid_meeting_ended_token?
+
     @room = Room.find_by(meeting_id: extract_meeting_id)
     return render json: {}, status: :ok unless @room
 
@@ -153,13 +163,22 @@ class ExternalController < ApplicationController
     meeting_id
   end
 
+  def valid_meeting_ended_token?
+    return false if params[:token].blank? || params[:meetingID].blank?
+
+    payload = BigBlueButtonApi.new(provider: current_provider).decode_jwt(params[:token])
+    payload[0]['meeting_id'] == extract_meeting_id
+  rescue JWT::DecodeError
+    false
+  end
+
   def valid_invite_token(email:)
     token = cookies[:inviteToken]
 
     return false if token.blank?
 
     # Try to delete the invitation and return true if it succeeds
-    Invitation.destroy_by(email: email.downcase, provider: current_provider, token:).present?
+    Invitation.unexpired.destroy_by(email: email.downcase, provider: current_provider, token:).present?
   end
 
   def build_user_info(credentials)
@@ -188,5 +207,39 @@ class ExternalController < ApplicationController
       external_id: credentials['uid'],
       verified: true
     }
+  end
+
+  # Downloads the image and correctly attaches it to the user
+  def handle_avatar(user, image)
+    return if image.blank? || !user.valid? # return if no image passed or user isnt valid
+
+    profile_file = URI.parse(image)
+
+    filename = File.basename(profile_file.path)
+    return if user.avatar&.filename&.to_s == filename # return if the filename is the same
+
+    file = profile_file.open
+    user.avatar.attach(
+      io: file, filename:, content_type: file.content_type
+    )
+
+    return if user.valid?
+
+    Rails.logger.warn("Discarding the avatar for #{user.email}: #{user.errors[:avatar].to_sentence}")
+    user.attachment_changes.delete('avatar')
+  rescue StandardError => e
+    Rails.logger.error("Failed to upload avatar for #{user.id}: #{e}")
+    nil
+  end
+
+  def valid_domain?(email)
+    allowed_domain_emails = SettingGetter.new(setting_name: 'AllowedDomains', provider: current_provider).call
+    return true if allowed_domain_emails.blank?
+
+    domains = allowed_domain_emails.split(',')
+    domains.each do |domain|
+      return true if email.end_with?(domain)
+    end
+    false
   end
 end
