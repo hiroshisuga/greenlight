@@ -256,6 +256,50 @@ describe RecordingCreator, type: :service do
           expect(room.recordings.first.visibility).to eq(Recording::VISIBILITIES[:unpublished])
         end
       end
+
+      describe 'Repeated recording-ready notifications' do
+        let(:bbb_api) { instance_double(BigBlueButtonApi) }
+
+        before do
+          allow(BigBlueButtonApi).to receive(:new).with(provider: room.user.provider).and_return(bbb_api)
+        end
+
+        Recording::VISIBILITIES.each_value do |visibility|
+          it "preserves #{visibility} and reapplies it to BBB after a rebuild" do
+            existing = create(:recording, room:, record_id: bbb_recording[:recordID], visibility:)
+            service = described_class.new(recording: bbb_recording, first_creation: true)
+            expect(service).not_to receive(:default_recording_visibility)
+            expect(bbb_api).to receive(:update_recording_visibility).with(record_id: existing.record_id, visibility:)
+
+            expect { service.call }.not_to change(Recording, :count)
+
+            expect(existing.reload.visibility).to eq(visibility)
+            expect(existing.name).to eq(bbb_recording[:name])
+            expect(existing.length).to eq(bbb_recording[:playback][:format][:length])
+            expect(existing.participants).to eq(bbb_recording[:participants].to_i)
+          end
+        end
+
+        it 'keeps the chosen visibility across duplicate callbacks after the site default changes' do
+          service = described_class.new(recording: bbb_recording, first_creation: true)
+          allow(service).to receive(:default_recording_visibility).and_return('Unpublished', 'Public')
+          expect(bbb_api).to receive(:update_recording_visibility).with(record_id: bbb_recording[:recordID], visibility: 'Unpublished').twice
+
+          2.times { service.call }
+
+          expect(room.recordings.first.visibility).to eq('Unpublished')
+          expect(service).to have_received(:default_recording_visibility).once
+        end
+
+        it 'continues to import BBB visibility during an explicit synchronization' do
+          existing = create(:recording, room:, record_id: bbb_recording[:recordID], visibility: 'Unpublished')
+          expect(bbb_api).not_to receive(:update_recording_visibility)
+
+          described_class.new(recording: public_recording).call
+
+          expect(existing.reload.visibility).to eq('Public')
+        end
+      end
     end
   end
 
