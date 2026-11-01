@@ -28,9 +28,13 @@ class RecordingCreator
     raise ActiveRecord::RecordNotFound if room.nil?
 
     @provider = room.user.provider
+    new_recording = Recording.find_or_initialize_by(record_id: @recording[:recordID])
 
-    # If the recording is being created for the first time, get the visibility from the site setting
-    visibility = if @first_creation
+    # Rebuilds and duplicate ready callbacks also use first_creation. Keep the
+    # existing choice and reapply it to BBB below instead of resetting it.
+    visibility = if @first_creation && new_recording.persisted?
+                   new_recording.visibility
+                 elsif @first_creation
                    default_recording_visibility
                  else
                    recording_visibility
@@ -41,7 +45,6 @@ class RecordingCreator
 
     new_name = @recording[:metadata][:name] || @recording[:name]
 
-    new_recording = Recording.find_or_initialize_by(record_id: @recording[:recordID])
     new_recording.room_id = room.id
     new_recording.name = new_name
     new_recording.visibility = visibility
